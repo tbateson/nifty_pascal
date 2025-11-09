@@ -14,8 +14,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tag:
-        - nifty_pascal-linux
+        include:
+        - tag: nifty_pascal-linux
+          base: alpine
+          user: ci
+        - tag: nifty_pascal-dev
+          base: mcr.microsoft.com/devcontainers/base:alpine
+          user: vscode
 
     steps:
     - uses: actions/checkout@v5
@@ -25,9 +30,12 @@ jobs:
     - name: Build Docker Image
       uses: docker/build-push-action@v6
       with:
+        build-args: |
+          BASE=${{ matrix.base }}
+          USER=${{ matrix.user }}
         cache-from: type=gha,scope=${{ matrix.tag }}
         cache-to: type=gha,ignore-error=true,mode=max,scope=${{ matrix.tag }}
-        context: ${{ matrix.tag }}
+        context: nifty_pascal-linux
         outputs: type=docker
         tags: 76eddge/build-images:${{ matrix.tag }}
         target: deploy

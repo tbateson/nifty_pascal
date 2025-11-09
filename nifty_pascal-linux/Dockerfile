@@ -1,7 +1,8 @@
-FROM alpine AS deploy
+ARG BASE=alpine
+FROM ${BASE} AS deploy
 
 # Install build dependencies
-RUN apk add --no-cache afl++ autoconf automake chromium clang clang-analyzer clang-extra-tools cmake curl doxygen file fontconfig fuse-overlayfs gdb g++ git git-lfs helm libtool linux-headers lld llvm make msttcorefonts-installer nodejs openssl patch perl podman py3-colorlog py3-jinja2 py3-lxml py3-pygments py3-setuptools python3 samurai sed sudo util-linux-dev valgrind websocat xz && \
+RUN apk add --no-cache afl++ autoconf automake chromium clang clang-analyzer clang-extra-tools cmake curl doxygen file fontconfig fuse-overlayfs gdb g++ git git-lfs helm libtool linux-headers lld lldb llvm make msttcorefonts-installer nodejs openssl patch perl podman py3-colorlog py3-jinja2 py3-lxml py3-pygments py3-setuptools python3 samurai sed sudo util-linux-dev valgrind websocat xz && \
 	ln -sf python3 /usr/bin/python
 
 # Install git-tools
@@ -11,7 +12,7 @@ RUN curl -sL https://github.com/MestreLion/git-tools/archive/refs/tags/v2022.12.
 
 # Install npm, JDK, gradle from latest-stable for security fixes
 RUN apk add --no-cache -X https://dl-cdn.alpinelinux.org/alpine/latest-stable/community npm openjdk17-jdk && \
-	curl -sL $(curl -sL https://gradle.org/releases/ | sed -nre 's/.*"([^"]+-bin\.zip)".*/\1/p' | head -n1) | unzip -d /opt -q - && \
+	curl -sL $(curl -sL https://gradle.org/releases/ | sed -nre 's/.*"([^"]+-bin\.zip)".*/\1/p' | head -n1) | busybox unzip -d /opt -q - && \
 	chmod +x /opt/gradle-*/bin/gradle && ln -s /opt/gradle-*/bin/gradle /usr/bin/gradle
 
 # Install Powershell and its dependencies, see https://learn.microsoft.com/en-us/powershell/scripting/install/install-alpine
@@ -58,27 +59,28 @@ RUN ZARF_VERSION=$(curl -sIX HEAD https://github.com/zarf-dev/zarf/releases/late
 	mv zarf /usr/bin/zarf
 
 # Configure podman
-RUN echo jenkins:10000:5000 >/etc/subuid && \
-	echo jenkins:10000:5000 >/etc/subgid && \
+ARG USER=user
+RUN echo ${USER}:10000:5000 >/etc/subuid && \
+	echo ${USER}:10000:5000 >/etc/subgid && \
 	sed -i 's/#mount_program/mount_program/' /etc/containers/storage.conf
 
 # Perform tasks as basic user
-RUN adduser --disabled-password jenkins && \
+RUN adduser --disabled-password ${USER} | : && \
 	mkdir -p /etc/sudoers.d && \
-	echo "jenkins ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/jenkins && \
-	chmod 0440 /etc/sudoers.d/jenkins
+	echo "${USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${USER} && \
+	chmod 0440 /etc/sudoers.d/${USER}
 
-USER jenkins
-WORKDIR /home/jenkins
+USER ${USER}
+WORKDIR /home/${USER}
 
 # Install MS ClearType fonts for user
 RUN mkdir -p ~/.local/share/fonts && \
-	curl -s -L https://github.com/mrbvrz/segoe-ui-linux/archive/a89213b7136da6dd5c3638db1f2c6e814c40fa84.zip | unzip -d ~/.local/share/fonts -j - '*/font/*' && \
+	curl -s -L https://github.com/mrbvrz/segoe-ui-linux/archive/a89213b7136da6dd5c3638db1f2c6e814c40fa84.zip | busybox unzip -d ~/.local/share/fonts -j - '*/font/*' && \
 	curl -s -L -o PowerPointViewer.exe https://archive.org/download/PowerPointViewer_201801/PowerPointViewer.exe && cabextract PowerPointViewer.exe -F ppviewer.cab && cabextract ppviewer.cab -F '*.TTC' -d ~/.local/share/fonts/ && cabextract ppviewer.cab -F '*.TTF' -d ~/.local/share/fonts/ && rm -rf *.exe *.cab && \
 	fc-cache -fv ~/.local/share/fonts
 
 # Initialize npm
-COPY --chown=jenkins package.json ./npm-init/
+COPY --chown=${USER} package.json ./npm-init/
 RUN PUPPETEER_SKIP_DOWNLOAD=true cd npm-init && \
 	npm install && \
 	npm install monocart-coverage-reports && \
@@ -89,7 +91,7 @@ RUN PUPPETEER_SKIP_DOWNLOAD=true cd npm-init && \
 RUN git config --global --add safe.directory "*"
 
 # Initialize gradle
-COPY --chown=jenkins build.gradle ./gradle-init/
+COPY --chown=${USER} build.gradle ./gradle-init/
 RUN cd gradle-init && \
 	gradle -i --no-daemon resolveDependencies --refresh-dependencies && \
 	cd .. && \
