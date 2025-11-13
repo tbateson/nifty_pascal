@@ -67,6 +67,22 @@ jobs:
         sarif_file: ${{ matrix.tag }}.sarif
         category: ${{ matrix.tag }}
 
+    - name: Run Trivy Scan
+      if: github.event_name != 'release'
+      uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+      with:
+        image-ref: 76eddge/build-images:${{ matrix.tag }}
+        format: sarif
+        output: trivy-results.sarif
+        severity: CRITICAL,HIGH
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Trivy Scan Results
+      if: github.event_name != 'release'
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: trivy-results.sarif
+
   build-windows:
 
     runs-on: windows-2019
